@@ -1,12 +1,9 @@
 # Acpi
-![Build Status](https://github.com/rust-osdev/acpi/actions/workflows/build.yml/badge.svg)
-[![Version](https://img.shields.io/crates/v/rsdp.svg?style=rounded-square)](https://crates.io/crates/rsdp/)
-[![Version](https://img.shields.io/crates/v/acpi.svg?style=rounded-square)](https://crates.io/crates/acpi/)
-[![Version](https://img.shields.io/crates/v/aml.svg?style=rounded-square)](https://crates.io/crates/aml/)
-
 ### [Documentation (`rsdp`)](https://docs.rs/rsdp)
 ### [Documentation (`acpi`)](https://docs.rs/acpi)
 ### [Documentation (`aml`)](https://docs.rs/aml)
+
+This is a fork of the `acpi` crate. The original crate (whose README contents is below) depended on alloc. This is a `no-std` version of the crate with a reduced feature set.
 
 A library to parse ACPI tables and AML, written in pure Rust. Designed to be easy to use from Rust bootloaders and kernels. The library is split into three crates:
 - `rsdp` parses the RSDP and can locate it on BIOS platforms. It does not depend on `alloc`, so is suitable to use from bootloaders without heap alloctors. All of its

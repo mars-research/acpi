@@ -50,11 +50,9 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-extern crate alloc;
 #[cfg_attr(test, macro_use)]
 #[cfg(test)]
 extern crate std;
-
 pub mod fadt;
 pub mod hpet;
 pub mod madt;
