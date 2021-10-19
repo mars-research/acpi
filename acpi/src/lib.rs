@@ -73,7 +73,6 @@ pub use rsdp::{
 };
 
 use crate::sdt::{SdtHeader, Signature};
-use alloc::{collections::BTreeMap, vec::Vec};
 use core::mem;
 use log::trace;
 use rsdp::Rsdp;
@@ -94,22 +93,90 @@ pub enum AcpiError {
     InvalidGenericAddress,
 }
 
+pub struct SdtTable {
+    pub location: Sdt,
+    pub header: SdtHeader,
+}
+
 pub struct AcpiTables<H>
 where
     H: AcpiHandler,
 {
     /// The revision of ACPI that the system uses, as inferred from the revision of the RSDT/XSDT.
     pub revision: u8,
-    pub sdts: BTreeMap<sdt::Signature, Sdt>,
-    pub dsdt: Option<AmlTable>,
-    pub ssdts: Vec<AmlTable>,
     handler: H,
+
+    pub madt: Option<SdtTable>,
+    pub bert: Option<SdtTable>,
+    pub bgrt: Option<SdtTable>,
+    pub cpep: Option<SdtTable>,
+    pub dsdt: Option<SdtTable>,
+    pub ecdt: Option<SdtTable>,
+    pub einj: Option<SdtTable>,
+    pub erst: Option<SdtTable>,
+    pub fadt: Option<SdtTable>,
+    pub facs: Option<SdtTable>,
+    pub fpdt: Option<SdtTable>,
+    pub gtdt: Option<SdtTable>,
+    pub hest: Option<SdtTable>,
+    pub msct: Option<SdtTable>,
+    pub mpst: Option<SdtTable>,
+    pub nfit: Option<SdtTable>,
+    // pub oemx: Option<SdtTable>,
+    pub pcct: Option<SdtTable>,
+    pub phat: Option<SdtTable>,
+    pub pmtt: Option<SdtTable>,
+    pub psdt: Option<SdtTable>,
+    pub rasf: Option<SdtTable>,
+    pub rsdt: Option<SdtTable>,
+    pub sbst: Option<SdtTable>,
+    pub sdev: Option<SdtTable>,
+    pub slit: Option<SdtTable>,
+    pub srat: Option<SdtTable>,
+    pub ssdt: Option<SdtTable>, /* I'm supporting just one AmlTable at the moment because I don't really need the ssdt */
+    pub xsdt: Option<SdtTable>,
 }
 
 impl<H> AcpiTables<H>
 where
     H: AcpiHandler,
 {
+    fn new(revision: u8, handler: H) -> Self {
+        AcpiTables {
+            revision,
+            handler,
+
+            madt: None,
+            bert: None,
+            bgrt: None,
+            cpep: None,
+            dsdt: None,
+            ecdt: None,
+            einj: None,
+            erst: None,
+            fadt: None,
+            facs: None,
+            fpdt: None,
+            gtdt: None,
+            hest: None,
+            msct: None,
+            mpst: None,
+            nfit: None,
+            pcct: None,
+            phat: None,
+            pmtt: None,
+            psdt: None,
+            rasf: None,
+            rsdt: None,
+            sbst: None,
+            sdev: None,
+            slit: None,
+            srat: None,
+            ssdt: None,
+            xsdt: None,
+        }
+    }
+
     /// Create an `AcpiTables` if you have the physical address of the RSDP.
     pub unsafe fn from_rsdp(handler: H, rsdp_address: usize) -> Result<AcpiTables<H>, AcpiError> {
         let rsdp_mapping = unsafe { handler.map_physical_region::<Rsdp>(rsdp_address, mem::size_of::<Rsdp>()) };
@@ -155,7 +222,7 @@ where
     /// bootloader reads the RSDP and passes you the address of the RSDT. You also need to supply the correct ACPI
     /// revision - if `0`, a RSDT is expected, while a `XSDT` is expected for greater revisions.
     pub unsafe fn from_rsdt(handler: H, revision: u8, rsdt_address: usize) -> Result<AcpiTables<H>, AcpiError> {
-        let mut result = AcpiTables { revision, sdts: BTreeMap::new(), dsdt: None, ssdts: Vec::new(), handler };
+        let mut result = Self::new(revision, handler);
 
         let header = sdt::peek_at_sdt_header(&result.handler, rsdt_address);
         let mapping =
@@ -166,6 +233,11 @@ where
              * ACPI Version 1.0. It's a RSDT!
              */
             mapping.validate(sdt::Signature::RSDT)?;
+
+            result.rsdt = Some(SdtTable {
+                location: Sdt { physical_address: rsdt_address, length: header.length, validated: true },
+                header,
+            });
 
             let num_tables = (mapping.length as usize - mem::size_of::<SdtHeader>()) / mem::size_of::<u32>();
             let tables_base =
@@ -180,6 +252,11 @@ where
              */
             mapping.validate(sdt::Signature::XSDT)?;
 
+            result.xsdt = Some(SdtTable {
+                location: Sdt { physical_address: rsdt_address, length: header.length, validated: true },
+                header,
+            });
+
             let num_tables = (mapping.length as usize - mem::size_of::<SdtHeader>()) / mem::size_of::<u64>();
             let tables_base =
                 ((mapping.virtual_start().as_ptr() as usize) + mem::size_of::<SdtHeader>()) as *const u64;
@@ -190,19 +267,6 @@ where
         }
 
         Ok(result)
-    }
-
-    /// Construct an `AcpiTables` from a custom set of "discovered" tables. This is provided to allow the library
-    /// to be used from unconventional settings (e.g. in userspace), for example with a `AcpiHandler` that detects
-    /// accesses to specific physical addresses, and provides the correct data.
-    pub fn from_tables_direct(
-        handler: H,
-        revision: u8,
-        sdts: BTreeMap<sdt::Signature, Sdt>,
-        dsdt: Option<AmlTable>,
-        ssdts: Vec<AmlTable>,
-    ) -> AcpiTables<H> {
-        AcpiTables { revision, sdts, dsdt, ssdts, handler }
     }
 
     fn process_sdt(&mut self, physical_address: usize) -> Result<(), AcpiError> {
@@ -223,19 +287,110 @@ where
 
                 let dsdt_address = fadt_mapping.dsdt_address()?;
                 let dsdt_header = sdt::peek_at_sdt_header(&self.handler, dsdt_address);
-                self.dsdt = Some(AmlTable::new(dsdt_address, dsdt_header.length));
+                self.dsdt = Some(SdtTable {
+                    location: Sdt { physical_address: dsdt_address, length: dsdt_header.length, validated: true },
+                    header: dsdt_header,
+                });
 
                 /*
                  * We've already validated the FADT to get the DSDT out, so it doesn't need to be done again.
                  */
-                self.sdts
-                    .insert(Signature::FADT, Sdt { physical_address, length: header.length, validated: true });
+                self.fadt = Some(SdtTable {
+                    location: Sdt { physical_address, length: header.length, validated: true },
+                    header,
+                });
             }
             Signature::SSDT => {
-                self.ssdts.push(AmlTable::new(physical_address, header.length));
+                if self.ssdt.is_none() {
+                    self.ssdt = Some(SdtTable {
+                        location: Sdt { physical_address, length: header.length, validated: false },
+                        header,
+                    })
+                };
             }
             signature => {
-                self.sdts.insert(signature, Sdt { physical_address, length: header.length, validated: false });
+                let table = Some(SdtTable {
+                    location: Sdt { physical_address, length: header.length, validated: false },
+                    header,
+                });
+
+                match signature {
+                    Signature::MADT => {
+                        self.madt = table;
+                    }
+                    Signature::BERT => {
+                        self.bert = table;
+                    }
+                    Signature::BGRT => {
+                        self.bgrt = table;
+                    }
+                    Signature::CPEP => {
+                        self.cpep = table;
+                    }
+                    Signature::ECDT => {
+                        self.ecdt = table;
+                    }
+                    Signature::EINJ => {
+                        self.einj = table;
+                    }
+                    Signature::ERST => {
+                        self.erst = table;
+                    }
+                    Signature::FACS => {
+                        self.facs = table;
+                    }
+                    Signature::FPDT => {
+                        self.fpdt = table;
+                    }
+                    Signature::GTDT => {
+                        self.gtdt = table;
+                    }
+                    Signature::HEST => {
+                        self.hest = table;
+                    }
+                    Signature::MSCT => {
+                        self.msct = table;
+                    }
+                    Signature::MPST => {
+                        self.mpst = table;
+                    }
+                    Signature::NFIT => {
+                        self.nfit = table;
+                    }
+                    Signature::PCCT => {
+                        self.pcct = table;
+                    }
+                    Signature::PHAT => {
+                        self.phat = table;
+                    }
+                    Signature::PMTT => {
+                        self.pmtt = table;
+                    }
+                    Signature::PSDT => {
+                        self.psdt = table;
+                    }
+                    Signature::RASF => {
+                        self.rasf = table;
+                    }
+                    Signature::RSDT => {
+                        self.rsdt = table;
+                    }
+                    Signature::SBST => {
+                        self.sbst = table;
+                    }
+                    Signature::SDEV => {
+                        self.sdev = table;
+                    }
+                    Signature::SLIT => {
+                        self.slit = table;
+                    }
+                    Signature::SRAT => {
+                        self.srat = table;
+                    }
+                    Signature::XSDT => {
+                        self.xsdt = table;
+                    }
+                }
             }
         }
 
@@ -257,10 +412,42 @@ where
     where
         T: AcpiTable,
     {
-        let sdt = match self.sdts.get(&signature) {
-            Some(sdt) => sdt,
+        let table = match signature {
+            Signature::MADT => self.madt,
+            Signature::BERT => self.bert,
+            Signature::BGRT => self.bgrt,
+            Signature::CPEP => self.cpep,
+            Signature::DSDT => self.dsdt,
+            Signature::ECDT => self.ecdt,
+            Signature::EINJ => self.einj,
+            Signature::ERST => self.erst,
+            Signature::FADT => self.fadt,
+            Signature::FACS => self.facs,
+            Signature::FPDT => self.fpdt,
+            Signature::GTDT => self.gtdt,
+            Signature::HEST => self.hest,
+            Signature::MSCT => self.msct,
+            Signature::MPST => self.mpst,
+            Signature::NFIT => self.nfit,
+            Signature::PCCT => self.pcct,
+            Signature::PHAT => self.phat,
+            Signature::PMTT => self.pmtt,
+            Signature::PSDT => self.psdt,
+            Signature::RASF => self.rasf,
+            Signature::RSDT => self.rsdt,
+            Signature::SBST => self.sbst,
+            Signature::SDEV => self.sdev,
+            Signature::SLIT => self.slit,
+            Signature::SRAT => self.srat,
+            Signature::SSDT => self.ssdt,
+            Signature::XSDT => self.xsdt,
+        };
+
+        let sdt = match table {
+            Some(sdt) => sdt.location,
             None => return Ok(None),
         };
+
         let mapping = unsafe { self.handler.map_physical_region::<T>(sdt.physical_address, sdt.length as usize) };
 
         if !sdt.validated {
