@@ -1,5 +1,4 @@
 use crate::{sdt::SdtHeader, AcpiError, AcpiHandler, AcpiTable, AcpiTables};
-use alloc::vec::Vec;
 use core::{mem, slice};
 
 /// Describes a set of regions of physical memory used to access the PCIe configuration space. A
@@ -8,11 +7,11 @@ use core::{mem, slice};
 /// address of the start of that device function's configuration space (each function has 4096
 /// bytes of configuration space in PCIe).
 #[derive(Clone, Debug)]
-pub struct PciConfigRegions {
-    regions: Vec<McfgEntry>,
+pub struct PciConfigRegions<'a> {
+    regions: &'a [McfgEntry],
 }
 
-impl PciConfigRegions {
+impl<'a> PciConfigRegions<'a> {
     pub fn new<H>(tables: &AcpiTables<H>) -> Result<PciConfigRegions, AcpiError>
     where
         H: AcpiHandler,
@@ -22,7 +21,7 @@ impl PciConfigRegions {
                 .get_sdt::<Mcfg>(crate::sdt::Signature::MCFG)?
                 .ok_or(AcpiError::TableMissing(crate::sdt::Signature::MCFG))?
         };
-        Ok(PciConfigRegions { regions: mcfg.entries().iter().copied().collect() })
+        Ok(PciConfigRegions { regions: mcfg.entries() })
     }
 
     /// Get the physical address of the start of the configuration space for a given PCIe device
@@ -59,7 +58,7 @@ impl AcpiTable for Mcfg {
 }
 
 impl Mcfg {
-    fn entries(&self) -> &[McfgEntry] {
+    fn entries(&self) -> &'static [McfgEntry] {
         let length = self.header.length as usize - mem::size_of::<Mcfg>();
 
         // Intentionally round down in case length isn't an exact multiple of McfgEntry size

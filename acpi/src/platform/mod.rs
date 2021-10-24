@@ -3,7 +3,6 @@ pub mod interrupt;
 
 use crate::{fadt::Fadt, madt::Madt, AcpiError, AcpiHandler, AcpiTables, PowerProfile};
 use address::GenericAddress;
-use alloc::vec::Vec;
 use interrupt::InterruptModel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,11 +36,11 @@ pub struct Processor {
     pub is_ap: bool,
 }
 
-pub struct ProcessorInfo {
-    pub boot_processor: Processor,
-    /// Application processors should be brought up in the order they're defined in this list.
-    pub application_processors: Vec<Processor>,
-}
+// pub struct ProcessorInfo {
+//     pub boot_processor: Processor,
+//     /// Application processors should be brought up in the order they're defined in this list.
+//     pub application_processors: Vec<Processor>,
+// }
 
 /// Information about the ACPI Power Management Timer (ACPI PM Timer).
 pub struct PmTimer {
@@ -68,7 +67,7 @@ pub struct PlatformInfo {
     pub interrupt_model: InterruptModel,
     /// On `x86_64` platforms that support the APIC, the processor topology must also be inferred from the
     /// interrupt model. That information is stored here, if present.
-    pub processor_info: Option<ProcessorInfo>,
+    // pub processor_info: Option<ProcessorInfo>,
     pub pm_timer: Option<PmTimer>,
     /*
      * TODO: we could provide a nice view of the hardware register blocks in the FADT here.
@@ -88,12 +87,13 @@ impl PlatformInfo {
         let power_profile = fadt.power_profile();
 
         let madt = unsafe { tables.get_sdt::<Madt>(crate::sdt::Signature::MADT)? };
-        let (interrupt_model, processor_info) = match madt {
+        let interrupt_model = match madt {
             Some(madt) => madt.parse_interrupt_model()?,
-            None => (InterruptModel::Unknown, None),
+            None => InterruptModel::Unknown,
         };
         let pm_timer = PmTimer::new(&fadt)?;
 
-        Ok(PlatformInfo { power_profile, interrupt_model, processor_info, pm_timer })
+        // Ok(PlatformInfo { power_profile, interrupt_model, processor_info, pm_timer })
+        Ok(PlatformInfo { power_profile, interrupt_model, pm_timer })
     }
 }

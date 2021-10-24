@@ -13,14 +13,12 @@ use crate::{
             TriggerMode,
         },
         Processor,
-        ProcessorInfo,
         ProcessorState,
     },
     sdt::SdtHeader,
     AcpiError,
     AcpiTable,
 };
-use alloc::vec::Vec;
 use bit_field::BitField;
 use core::{marker::PhantomData, mem};
 
@@ -55,7 +53,7 @@ impl AcpiTable for Madt {
 }
 
 impl Madt {
-    pub fn parse_interrupt_model(&self) -> Result<(InterruptModel, Option<ProcessorInfo>), AcpiError> {
+    pub fn parse_interrupt_model(&self) -> Result<InterruptModel, AcpiError> {
         /*
          * We first do a pass through the MADT to determine which interrupt model is being used.
          */
@@ -69,7 +67,8 @@ impl Madt {
                 MadtEntry::LocalApicNmi(_) |
                 MadtEntry::X2ApicNmi(_) |
                 MadtEntry::LocalApicAddressOverride(_) => {
-                    return self.parse_apic_model();
+                    unimplemented!();
+                    // return self.parse_apic_model();
                 }
 
                 MadtEntry::IoSapic(_) |
@@ -90,172 +89,172 @@ impl Madt {
             }
         }
 
-        Ok((InterruptModel::Unknown, None))
+        Ok(InterruptModel::Unknown)
     }
 
-    fn parse_apic_model(&self) -> Result<(InterruptModel, Option<ProcessorInfo>), AcpiError> {
-        let mut local_apic_address = self.local_apic_address as u64;
-        let mut io_apic_count = 0;
-        let mut iso_count = 0;
-        let mut nmi_source_count = 0;
-        let mut local_nmi_line_count = 0;
-        let mut processor_count = 0usize;
+    // fn parse_apic_model(&self) -> Result<(InterruptModel), AcpiError> {
+    //     let mut local_apic_address = self.local_apic_address as u64;
+    //     let mut io_apic_count = 0;
+    //     let mut iso_count = 0;
+    //     let mut nmi_source_count = 0;
+    //     let mut local_nmi_line_count = 0;
+    //     let mut processor_count = 0usize;
 
-        // Do a pass over the entries so we know how much space we should reserve in the vectors
-        for entry in self.entries() {
-            match entry {
-                MadtEntry::IoApic(_) => io_apic_count += 1,
-                MadtEntry::InterruptSourceOverride(_) => iso_count += 1,
-                MadtEntry::NmiSource(_) => nmi_source_count += 1,
-                MadtEntry::LocalApicNmi(_) => local_nmi_line_count += 1,
-                MadtEntry::LocalApic(_) => processor_count += 1,
-                _ => (),
-            }
-        }
+    //     // Do a pass over the entries so we know how much space we should reserve in the vectors
+    //     for entry in self.entries() {
+    //         match entry {
+    //             MadtEntry::IoApic(_) => io_apic_count += 1,
+    //             MadtEntry::InterruptSourceOverride(_) => iso_count += 1,
+    //             MadtEntry::NmiSource(_) => nmi_source_count += 1,
+    //             MadtEntry::LocalApicNmi(_) => local_nmi_line_count += 1,
+    //             MadtEntry::LocalApic(_) => processor_count += 1,
+    //             _ => (),
+    //         }
+    //     }
 
-        let mut io_apics = Vec::with_capacity(io_apic_count);
-        let mut interrupt_source_overrides = Vec::with_capacity(iso_count);
-        let mut nmi_sources = Vec::with_capacity(nmi_source_count);
-        let mut local_apic_nmi_lines = Vec::with_capacity(local_nmi_line_count);
-        let mut boot_processor = None;
-        let mut application_processors = Vec::with_capacity(processor_count.saturating_sub(1)); // Subtract one for the BSP
+    //     let mut io_apics = Vec::with_capacity(io_apic_count);
+    //     let mut interrupt_source_overrides = Vec::with_capacity(iso_count);
+    //     let mut nmi_sources = Vec::with_capacity(nmi_source_count);
+    //     let mut local_apic_nmi_lines = Vec::with_capacity(local_nmi_line_count);
+    //     let mut boot_processor = None;
+    //     let mut application_processors = Vec::with_capacity(processor_count.saturating_sub(1)); // Subtract one for the BSP
 
-        for entry in self.entries() {
-            match entry {
-                MadtEntry::LocalApic(entry) => {
-                    /*
-                     * The first processor is the BSP. Subsequent ones are APs. If we haven't found
-                     * the BSP yet, this must be it.
-                     */
-                    let is_ap = boot_processor.is_some();
-                    let is_disabled = !{ entry.flags }.get_bit(0);
+    //     for entry in self.entries() {
+    //         match entry {
+    //             MadtEntry::LocalApic(entry) => {
+    //                 /*
+    //                  * The first processor is the BSP. Subsequent ones are APs. If we haven't found
+    //                  * the BSP yet, this must be it.
+    //                  */
+    //                 let is_ap = boot_processor.is_some();
+    //                 let is_disabled = !{ entry.flags }.get_bit(0);
 
-                    let state = match (is_ap, is_disabled) {
-                        (_, true) => ProcessorState::Disabled,
-                        (true, false) => ProcessorState::WaitingForSipi,
-                        (false, false) => ProcessorState::Running,
-                    };
+    //                 let state = match (is_ap, is_disabled) {
+    //                     (_, true) => ProcessorState::Disabled,
+    //                     (true, false) => ProcessorState::WaitingForSipi,
+    //                     (false, false) => ProcessorState::Running,
+    //                 };
 
-                    let processor = Processor {
-                        processor_uid: entry.processor_id as u32,
-                        local_apic_id: entry.apic_id as u32,
-                        state,
-                        is_ap,
-                    };
+    //                 let processor = Processor {
+    //                     processor_uid: entry.processor_id as u32,
+    //                     local_apic_id: entry.apic_id as u32,
+    //                     state,
+    //                     is_ap,
+    //                 };
 
-                    if is_ap {
-                        application_processors.push(processor);
-                    } else {
-                        boot_processor = Some(processor);
-                    }
-                }
+    //                 if is_ap {
+    //                     application_processors.push(processor);
+    //                 } else {
+    //                     boot_processor = Some(processor);
+    //                 }
+    //             }
 
-                MadtEntry::LocalX2Apic(entry) => {
-                    let is_ap = boot_processor.is_some();
-                    let is_disabled = !{ entry.flags }.get_bit(0);
+    //             MadtEntry::LocalX2Apic(entry) => {
+    //                 let is_ap = boot_processor.is_some();
+    //                 let is_disabled = !{ entry.flags }.get_bit(0);
 
-                    let state = match (is_ap, is_disabled) {
-                        (_, true) => ProcessorState::Disabled,
-                        (true, false) => ProcessorState::WaitingForSipi,
-                        (false, false) => ProcessorState::Running,
-                    };
-                    log::info!("Found X2APIC in MADT!");
+    //                 let state = match (is_ap, is_disabled) {
+    //                     (_, true) => ProcessorState::Disabled,
+    //                     (true, false) => ProcessorState::WaitingForSipi,
+    //                     (false, false) => ProcessorState::Running,
+    //                 };
+    //                 log::info!("Found X2APIC in MADT!");
 
-                    let processor = Processor {
-                        processor_uid: entry.processor_uid,
-                        local_apic_id: entry.x2apic_id,
-                        state,
-                        is_ap,
-                    };
+    //                 let processor = Processor {
+    //                     processor_uid: entry.processor_uid,
+    //                     local_apic_id: entry.x2apic_id,
+    //                     state,
+    //                     is_ap,
+    //                 };
 
-                    if is_ap {
-                        application_processors.push(processor);
-                    } else {
-                        boot_processor = Some(processor);
-                    }
-                }
+    //                 if is_ap {
+    //                     application_processors.push(processor);
+    //                 } else {
+    //                     boot_processor = Some(processor);
+    //                 }
+    //             }
 
-                MadtEntry::IoApic(entry) => {
-                    io_apics.push(IoApic {
-                        id: entry.io_apic_id,
-                        address: entry.io_apic_address,
-                        global_system_interrupt_base: entry.global_system_interrupt_base,
-                    });
-                }
+    //             MadtEntry::IoApic(entry) => {
+    //                 io_apics.push(IoApic {
+    //                     id: entry.io_apic_id,
+    //                     address: entry.io_apic_address,
+    //                     global_system_interrupt_base: entry.global_system_interrupt_base,
+    //                 });
+    //             }
 
-                MadtEntry::InterruptSourceOverride(entry) => {
-                    if entry.bus != 0 {
-                        return Err(AcpiError::InvalidMadt(MadtError::InterruptOverrideEntryHasInvalidBus));
-                    }
+    //             MadtEntry::InterruptSourceOverride(entry) => {
+    //                 if entry.bus != 0 {
+    //                     return Err(AcpiError::InvalidMadt(MadtError::InterruptOverrideEntryHasInvalidBus));
+    //                 }
 
-                    let (polarity, trigger_mode) = parse_mps_inti_flags(entry.flags)?;
+    //                 let (polarity, trigger_mode) = parse_mps_inti_flags(entry.flags)?;
 
-                    interrupt_source_overrides.push(InterruptSourceOverride {
-                        isa_source: entry.irq,
-                        global_system_interrupt: entry.global_system_interrupt,
-                        polarity,
-                        trigger_mode,
-                    });
-                }
+    //                 interrupt_source_overrides.push(InterruptSourceOverride {
+    //                     isa_source: entry.irq,
+    //                     global_system_interrupt: entry.global_system_interrupt,
+    //                     polarity,
+    //                     trigger_mode,
+    //                 });
+    //             }
 
-                MadtEntry::NmiSource(entry) => {
-                    let (polarity, trigger_mode) = parse_mps_inti_flags(entry.flags)?;
+    //             MadtEntry::NmiSource(entry) => {
+    //                 let (polarity, trigger_mode) = parse_mps_inti_flags(entry.flags)?;
 
-                    nmi_sources.push(NmiSource {
-                        global_system_interrupt: entry.global_system_interrupt,
-                        polarity,
-                        trigger_mode,
-                    });
-                }
+    //                 nmi_sources.push(NmiSource {
+    //                     global_system_interrupt: entry.global_system_interrupt,
+    //                     polarity,
+    //                     trigger_mode,
+    //                 });
+    //             }
 
-                MadtEntry::LocalApicNmi(entry) => local_apic_nmi_lines.push(NmiLine {
-                    processor: if entry.processor_id == 0xff {
-                        NmiProcessor::All
-                    } else {
-                        NmiProcessor::ProcessorUid(entry.processor_id as u32)
-                    },
-                    line: match entry.nmi_line {
-                        0 => LocalInterruptLine::Lint0,
-                        1 => LocalInterruptLine::Lint1,
-                        _ => return Err(AcpiError::InvalidMadt(MadtError::InvalidLocalNmiLine)),
-                    },
-                }),
+    //             MadtEntry::LocalApicNmi(entry) => local_apic_nmi_lines.push(NmiLine {
+    //                 processor: if entry.processor_id == 0xff {
+    //                     NmiProcessor::All
+    //                 } else {
+    //                     NmiProcessor::ProcessorUid(entry.processor_id as u32)
+    //                 },
+    //                 line: match entry.nmi_line {
+    //                     0 => LocalInterruptLine::Lint0,
+    //                     1 => LocalInterruptLine::Lint1,
+    //                     _ => return Err(AcpiError::InvalidMadt(MadtError::InvalidLocalNmiLine)),
+    //                 },
+    //             }),
 
-                MadtEntry::X2ApicNmi(entry) => local_apic_nmi_lines.push(NmiLine {
-                    processor: if entry.processor_uid == 0xffffffff {
-                        NmiProcessor::All
-                    } else {
-                        NmiProcessor::ProcessorUid(entry.processor_uid)
-                    },
-                    line: match entry.nmi_line {
-                        0 => LocalInterruptLine::Lint0,
-                        1 => LocalInterruptLine::Lint1,
-                        _ => return Err(AcpiError::InvalidMadt(MadtError::InvalidLocalNmiLine)),
-                    },
-                }),
+    //             MadtEntry::X2ApicNmi(entry) => local_apic_nmi_lines.push(NmiLine {
+    //                 processor: if entry.processor_uid == 0xffffffff {
+    //                     NmiProcessor::All
+    //                 } else {
+    //                     NmiProcessor::ProcessorUid(entry.processor_uid)
+    //                 },
+    //                 line: match entry.nmi_line {
+    //                     0 => LocalInterruptLine::Lint0,
+    //                     1 => LocalInterruptLine::Lint1,
+    //                     _ => return Err(AcpiError::InvalidMadt(MadtError::InvalidLocalNmiLine)),
+    //                 },
+    //             }),
 
-                MadtEntry::LocalApicAddressOverride(entry) => {
-                    local_apic_address = entry.local_apic_address;
-                }
+    //             MadtEntry::LocalApicAddressOverride(entry) => {
+    //                 local_apic_address = entry.local_apic_address;
+    //             }
 
-                _ => {
-                    return Err(AcpiError::InvalidMadt(MadtError::UnexpectedEntry));
-                }
-            }
-        }
+    //             _ => {
+    //                 return Err(AcpiError::InvalidMadt(MadtError::UnexpectedEntry));
+    //             }
+    //         }
+    //     }
 
-        Ok((
-            InterruptModel::Apic(Apic {
-                local_apic_address,
-                io_apics,
-                local_apic_nmi_lines,
-                interrupt_source_overrides,
-                nmi_sources,
-                also_has_legacy_pics: self.supports_8259(),
-            }),
-            Some(ProcessorInfo { boot_processor: boot_processor.unwrap(), application_processors }),
-        ))
-    }
+    //     Ok((
+    //         InterruptModel::Apic(Apic {
+    //             local_apic_address,
+    //             io_apics,
+    //             local_apic_nmi_lines,
+    //             interrupt_source_overrides,
+    //             nmi_sources,
+    //             also_has_legacy_pics: self.supports_8259(),
+    //         }),
+    //         Some(ProcessorInfo { boot_processor: boot_processor.unwrap(), application_processors }),
+    //     ))
+    // }
 
     pub fn entries(&self) -> MadtEntryIter {
         MadtEntryIter {

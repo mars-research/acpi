@@ -390,6 +390,7 @@ where
                     Signature::XSDT => {
                         self.xsdt = table;
                     }
+                    _ => {}
                 }
             }
         }
@@ -413,38 +414,39 @@ where
         T: AcpiTable,
     {
         let table = match signature {
-            Signature::MADT => self.madt,
-            Signature::BERT => self.bert,
-            Signature::BGRT => self.bgrt,
-            Signature::CPEP => self.cpep,
-            Signature::DSDT => self.dsdt,
-            Signature::ECDT => self.ecdt,
-            Signature::EINJ => self.einj,
-            Signature::ERST => self.erst,
-            Signature::FADT => self.fadt,
-            Signature::FACS => self.facs,
-            Signature::FPDT => self.fpdt,
-            Signature::GTDT => self.gtdt,
-            Signature::HEST => self.hest,
-            Signature::MSCT => self.msct,
-            Signature::MPST => self.mpst,
-            Signature::NFIT => self.nfit,
-            Signature::PCCT => self.pcct,
-            Signature::PHAT => self.phat,
-            Signature::PMTT => self.pmtt,
-            Signature::PSDT => self.psdt,
-            Signature::RASF => self.rasf,
-            Signature::RSDT => self.rsdt,
-            Signature::SBST => self.sbst,
-            Signature::SDEV => self.sdev,
-            Signature::SLIT => self.slit,
-            Signature::SRAT => self.srat,
-            Signature::SSDT => self.ssdt,
-            Signature::XSDT => self.xsdt,
+            Signature::MADT => self.madt.as_ref(),
+            Signature::BERT => self.bert.as_ref(),
+            Signature::BGRT => self.bgrt.as_ref(),
+            Signature::CPEP => self.cpep.as_ref(),
+            Signature::DSDT => self.dsdt.as_ref(),
+            Signature::ECDT => self.ecdt.as_ref(),
+            Signature::EINJ => self.einj.as_ref(),
+            Signature::ERST => self.erst.as_ref(),
+            Signature::FADT => self.fadt.as_ref(),
+            Signature::FACS => self.facs.as_ref(),
+            Signature::FPDT => self.fpdt.as_ref(),
+            Signature::GTDT => self.gtdt.as_ref(),
+            Signature::HEST => self.hest.as_ref(),
+            Signature::MSCT => self.msct.as_ref(),
+            Signature::MPST => self.mpst.as_ref(),
+            Signature::NFIT => self.nfit.as_ref(),
+            Signature::PCCT => self.pcct.as_ref(),
+            Signature::PHAT => self.phat.as_ref(),
+            Signature::PMTT => self.pmtt.as_ref(),
+            Signature::PSDT => self.psdt.as_ref(),
+            Signature::RASF => self.rasf.as_ref(),
+            Signature::RSDT => self.rsdt.as_ref(),
+            Signature::SBST => self.sbst.as_ref(),
+            Signature::SDEV => self.sdev.as_ref(),
+            Signature::SLIT => self.slit.as_ref(),
+            Signature::SRAT => self.srat.as_ref(),
+            Signature::SSDT => self.ssdt.as_ref(),
+            Signature::XSDT => self.xsdt.as_ref(),
+            _ => None,
         };
 
         let sdt = match table {
-            Some(sdt) => sdt.location,
+            Some(sdt) => &sdt.location,
             None => return Ok(None),
         };
 

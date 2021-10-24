@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 #[derive(Debug)]
 pub struct IoApic {
     pub id: u8,
@@ -65,11 +63,10 @@ pub struct NmiSource {
 #[derive(Debug)]
 pub struct Apic {
     pub local_apic_address: u64,
-    pub io_apics: Vec<IoApic>,
-    pub local_apic_nmi_lines: Vec<NmiLine>,
-    pub interrupt_source_overrides: Vec<InterruptSourceOverride>,
-    pub nmi_sources: Vec<NmiSource>,
-
+    // pub io_apics: Vec<IoApic>,
+    // pub local_apic_nmi_lines: Vec<NmiLine>,
+    // pub interrupt_source_overrides: Vec<InterruptSourceOverride>,
+    // pub nmi_sources: Vec<NmiSource>,
     /// If this field is set, you must remap and mask all the lines of the legacy PIC, even if
     /// you choose to use the APIC. It's recommended that you do this even if ACPI does not
     /// require you to.
